@@ -4,7 +4,7 @@ An animated mechanical heart reactor built entirely in Blender.
 
 ![MACHINA CORDIS mechanical heart reactor](output/machina-cordis-preview.png)
 
-MACHINA CORDIS is a fictional surgical machine constructed from brushed titanium pressure chambers, synchronized linear actuators, mechanical iris valves, glass vascular conduits, and two exposed timing systems. Its front crank train converts a rotating 16-tooth flywheel into articulated reciprocating motion while hydraulic manifolds, damped gauges, manual trim valves, pressure accumulators, and a ceramic-isolated power bus explain how the larger machine operates. Procedural oxidation, roughness variation, layered armor, exposed fasteners, and practical laboratory lighting give the device a grounded industrial finish. The complete scene is editable and does not rely on external textures or simulations.
+MACHINA CORDIS is a fictional surgical machine constructed from brushed titanium pressure chambers, synchronized linear actuators, mechanical iris valves, glass vascular conduits, and two exposed timing systems. Its front crank train converts a rotating 16-tooth flywheel into articulated reciprocating motion while hydraulic manifolds, damped gauges, manual trim valves, pressure accumulators, and a ceramic-isolated power bus explain how the larger machine operates. A rotating telemetry crown, avionics-style controller bays, optical encoder, fiber data channels, and a live hemodynamics console extend the design into believable advanced instrumentation. Procedural oxidation, anisotropic brushing, restrained fluid emission, smooth blended glass, layered armor, exposed fasteners, and practical laboratory lighting give the device a grounded industrial finish. The complete scene is editable and does not rely on external textures or simulations.
 
 ## Open and play
 
@@ -23,14 +23,18 @@ The animation loops four mechanical heartbeats at 24 fps.
 - A second 16-tooth flywheel with six spokes, twin eccentric cam pins, and articulated connecting rods
 - Dual hydraulic manifolds with eight pressure lines and independently lagging gauge needles
 - Four manual atrial trim valves with modeled handwheels, stems, spokes, and feed lines
+- A rotating 12-probe telemetry crown with copper winding, optical track, and fiber leads
+- Dual avionics bays with processor packages, copper traces, phased indicators, and data channels
+- An optical crank encoder and animated live-hemodynamics display with moving scan head
 - Glass arteries with animated arterial and venous illumination
 - Coiled pressure accumulators with calibration scales, cooling fins, and service harnesses
 - Rear electrical bus rails, ceramic isolation stacks, solenoid leads, and restraint arms
 - Inspection windows, diaphragms, fasteners, seals, and vessel couplings
 - Layered servo armor, bolted access plates, a ribbed sternum rail, and machined actuator caps
 - Instrument gauge, status lamp, warning markings, and serial plate
+- Physically restrained titanium, oxidized bronze, gunmetal, rubber, glass, and fluid palette
 - Procedural metal wear, Eevee lighting, practical luminaires, and a detailed laboratory backdrop
-- 448 scene objects and 77 independently animated objects
+- 557 scene objects and 102 independently animated objects
 - Seven clearly named collections for easy editing
 
 ## Rebuild the project

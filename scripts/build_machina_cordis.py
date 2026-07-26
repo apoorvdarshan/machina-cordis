@@ -61,6 +61,10 @@ def material(
     emission_strength: float = 0.0,
     alpha: float = 1.0,
     brushed: bool = False,
+    ior: float = 1.45,
+    coat_weight: float = 0.0,
+    coat_roughness: float = 0.2,
+    anisotropic: float = 0.0,
 ) -> bpy.types.Material:
     mat = bpy.data.materials.new(name)
     mat.use_nodes = True
@@ -73,13 +77,17 @@ def material(
     set_input(bsdf, "Roughness", roughness)
     set_input(bsdf, "Transmission Weight", transmission)
     set_input(bsdf, "Alpha", alpha)
+    set_input(bsdf, "IOR", ior)
+    set_input(bsdf, "Coat Weight", coat_weight)
+    set_input(bsdf, "Coat Roughness", coat_roughness)
+    set_input(bsdf, "Anisotropic", anisotropic)
     if emission is not None:
         set_input(bsdf, "Emission Color", emission)
         set_input(bsdf, "Emission Strength", emission_strength)
     if alpha < 1.0:
         mat.diffuse_color = (*color[:3], alpha)
         if hasattr(mat, "surface_render_method"):
-            mat.surface_render_method = "DITHERED"
+            mat.surface_render_method = "BLENDED"
     if brushed:
         noise = nodes.new("ShaderNodeTexNoise")
         noise.name = f"{name} micro-scratches"
@@ -355,106 +363,167 @@ def build() -> None:
 
     titanium = material(
         "Brushed surgical titanium",
-        (0.25, 0.28, 0.31, 1.0),
-        metallic=0.92,
-        roughness=0.36,
+        (0.17, 0.19, 0.21, 1.0),
+        metallic=0.96,
+        roughness=0.33,
         brushed=True,
+        coat_weight=0.08,
+        coat_roughness=0.22,
+        anisotropic=0.34,
     )
     dark_titanium = material(
         "Dark machined titanium",
-        (0.055, 0.065, 0.075, 1.0),
-        metallic=0.88,
-        roughness=0.34,
+        (0.028, 0.035, 0.042, 1.0),
+        metallic=0.94,
+        roughness=0.42,
         brushed=True,
+        coat_weight=0.05,
+        coat_roughness=0.28,
+        anisotropic=0.28,
     )
     ceramic = material(
         "Medical black ceramic",
-        (0.012, 0.016, 0.022, 1.0),
-        metallic=0.18,
-        roughness=0.2,
+        (0.008, 0.011, 0.015, 1.0),
+        metallic=0.06,
+        roughness=0.31,
+        coat_weight=0.20,
+        coat_roughness=0.18,
     )
     brass = material(
-        "Aged brass fittings",
-        (0.38, 0.19, 0.055, 1.0),
-        metallic=0.9,
-        roughness=0.29,
+        "Oxidized phosphor bronze",
+        (0.235, 0.105, 0.026, 1.0),
+        metallic=0.94,
+        roughness=0.39,
         brushed=True,
+        anisotropic=0.22,
     )
+    brass_ramp = brass.node_tree.nodes.get("Oxidized phosphor bronze color variation")
+    if brass_ramp:
+        brass_ramp.color_ramp.elements[0].color = (0.055, 0.060, 0.038, 1.0)
+        brass_ramp.color_ramp.elements[0].position = 0.22
+        brass_ramp.color_ramp.elements[1].color = (0.27, 0.125, 0.032, 1.0)
+        brass_ramp.color_ramp.elements[1].position = 0.78
     rubber = material(
         "Matte surgical rubber",
-        (0.015, 0.018, 0.022, 1.0),
-        roughness=0.72,
+        (0.009, 0.011, 0.014, 1.0),
+        roughness=0.84,
     )
     arterial = material(
         "Arterial fluid",
-        (0.17, 0.005, 0.008, 1.0),
-        metallic=0.05,
-        roughness=0.34,
-        emission=(0.42, 0.003, 0.004, 1.0),
-        emission_strength=0.55,
+        (0.055, 0.0015, 0.002, 1.0),
+        metallic=0.0,
+        roughness=0.25,
+        emission=(0.18, 0.0015, 0.002, 1.0),
+        emission_strength=0.14,
+        coat_weight=0.12,
+        coat_roughness=0.12,
     )
     venous = material(
         "Venous fluid",
-        (0.008, 0.035, 0.16, 1.0),
-        metallic=0.05,
-        roughness=0.34,
-        emission=(0.004, 0.05, 0.42, 1.0),
-        emission_strength=0.5,
+        (0.002, 0.010, 0.050, 1.0),
+        metallic=0.0,
+        roughness=0.25,
+        emission=(0.002, 0.018, 0.14, 1.0),
+        emission_strength=0.12,
+        coat_weight=0.12,
+        coat_roughness=0.12,
     )
     amber = material(
         "Amber indicator",
-        (0.25, 0.07, 0.005, 1.0),
-        roughness=0.24,
-        emission=(1.0, 0.13, 0.008, 1.0),
-        emission_strength=5.0,
+        (0.10, 0.025, 0.002, 1.0),
+        roughness=0.30,
+        emission=(0.48, 0.065, 0.003, 1.0),
+        emission_strength=1.6,
     )
     pale_green = material(
         "Stable status indicator",
-        (0.006, 0.18, 0.06, 1.0),
-        roughness=0.2,
-        emission=(0.02, 0.9, 0.16, 1.0),
-        emission_strength=4.0,
+        (0.003, 0.052, 0.014, 1.0),
+        roughness=0.28,
+        emission=(0.008, 0.28, 0.035, 1.0),
+        emission_strength=1.7,
     )
     glass = material(
         "Laboratory borosilicate glass",
-        (0.3, 0.42, 0.48, 1.0),
-        roughness=0.08,
-        transmission=0.92,
-        alpha=0.34,
+        (0.08, 0.11, 0.125, 1.0),
+        roughness=0.045,
+        transmission=0.96,
+        alpha=0.28,
+        ior=1.47,
+        coat_weight=0.18,
+        coat_roughness=0.05,
     )
     white = material(
         "Instrument markings",
-        (0.78, 0.82, 0.84, 1.0),
+        (0.48, 0.52, 0.54, 1.0),
         metallic=0.05,
-        roughness=0.32,
+        roughness=0.48,
     )
     warning = material(
         "Safety ochre",
-        (0.82, 0.29, 0.025, 1.0),
-        metallic=0.15,
-        roughness=0.35,
+        (0.39, 0.105, 0.008, 1.0),
+        metallic=0.08,
+        roughness=0.51,
     )
     gunmetal = material(
         "Oiled gunmetal",
-        (0.025, 0.032, 0.038, 1.0),
-        metallic=0.82,
-        roughness=0.43,
+        (0.018, 0.023, 0.028, 1.0),
+        metallic=0.92,
+        roughness=0.47,
         brushed=True,
+        coat_weight=0.10,
+        coat_roughness=0.25,
+        anisotropic=0.20,
     )
     lab_panel = material(
         "Powder-coated laboratory steel",
-        (0.018, 0.025, 0.032, 1.0),
-        metallic=0.55,
-        roughness=0.58,
+        (0.012, 0.017, 0.021, 1.0),
+        metallic=0.38,
+        roughness=0.67,
         brushed=True,
     )
     inspection_light = material(
         "Cold inspection luminaire",
-        (0.68, 0.82, 0.92, 1.0),
-        roughness=0.18,
-        emission=(0.62, 0.82, 1.0, 1.0),
-        emission_strength=6.5,
+        (0.42, 0.49, 0.54, 1.0),
+        roughness=0.24,
+        emission=(0.48, 0.61, 0.72, 1.0),
+        emission_strength=3.2,
     )
+    copper = material(
+        "Shielded oxygen-free copper",
+        (0.20, 0.060, 0.018, 1.0),
+        metallic=0.96,
+        roughness=0.37,
+        brushed=True,
+        anisotropic=0.32,
+    )
+    pcb = material(
+        "Matte aerospace control substrate",
+        (0.006, 0.021, 0.018, 1.0),
+        metallic=0.08,
+        roughness=0.72,
+    )
+    telemetry = material(
+        "Fiber optic telemetry",
+        (0.003, 0.038, 0.065, 1.0),
+        roughness=0.20,
+        emission=(0.004, 0.19, 0.34, 1.0),
+        emission_strength=0.85,
+        coat_weight=0.18,
+        coat_roughness=0.08,
+    )
+    telemetry_phases: list[bpy.types.Material] = []
+    for phase_index in range(3):
+        telemetry_phases.append(
+            material(
+                f"Telemetry phase {phase_index + 1}",
+                (0.002, 0.025, 0.040, 1.0),
+                roughness=0.22,
+                emission=(0.003, 0.15, 0.28, 1.0),
+                emission_strength=0.10,
+                coat_weight=0.15,
+                coat_roughness=0.10,
+            )
+        )
 
     # Pedestal and controls.
     rounded_box(
@@ -945,6 +1014,35 @@ def build() -> None:
         rotation=(math.radians(90), 0.0, 0.0),
         bevel=0.012,
     )
+    torus(
+        "Anterior crank optical encoder",
+        (
+            front_flywheel_center.x,
+            front_flywheel_center.y - 0.075,
+            front_flywheel_center.z,
+        ),
+        0.245,
+        0.010,
+        telemetry,
+        mechanisms,
+        rotation=(math.radians(90), 0.0, 0.0),
+    )
+    for encoder_index in range(12):
+        encoder_angle = math.tau * encoder_index / 12.0
+        cylinder(
+            f"Optical encoder index {encoder_index + 1:02d}",
+            (
+                front_flywheel_center.x + 0.245 * math.cos(encoder_angle),
+                front_flywheel_center.y - 0.088,
+                front_flywheel_center.z + 0.245 * math.sin(encoder_angle),
+            ),
+            0.010,
+            0.010,
+            telemetry_phases[encoder_index % 3],
+            mechanisms,
+            rotation=(math.radians(90), 0.0, 0.0),
+            vertices=12,
+        )
     front_cam_pins: list[
         tuple[bpy.types.Object, bpy.types.Object, float]
     ] = []
@@ -1320,6 +1418,93 @@ def build() -> None:
         manifold_needle["manifold_side"] = side_name
         manifold_needles.append(manifold_needle)
 
+    # Embedded avionics bays turn the pressure manifolds into actual control
+    # hardware: substrate, processor package, copper traces, and phased LEDs.
+    for bay_name, sign in (("Controller A", -1), ("Controller B", 1)):
+        bay_x = sign * 1.56
+        rounded_box(
+            f"{bay_name} electronics housing",
+            (bay_x, -0.345, 2.18),
+            (0.19, 0.055, 0.58),
+            0.035,
+            dark_titanium,
+            mechanisms,
+        )
+        rounded_box(
+            f"{bay_name} control substrate",
+            (bay_x, -0.382, 2.18),
+            (0.145, 0.020, 0.50),
+            0.018,
+            pcb,
+            mechanisms,
+        )
+        rounded_box(
+            f"{bay_name} processor package",
+            (bay_x, -0.400, 2.20),
+            (0.082, 0.014, 0.095),
+            0.012,
+            gunmetal,
+            mechanisms,
+        )
+        for pin_index in range(6):
+            pin_z = 2.155 + pin_index * 0.018
+            rounded_box(
+                f"{bay_name} processor pin {pin_index + 1}",
+                (bay_x + sign * 0.052, -0.411, pin_z),
+                (0.032, 0.008, 0.006),
+                0.001,
+                copper,
+                mechanisms,
+            )
+        for trace_index, trace_x_offset in enumerate((-0.045, 0.0, 0.045), start=1):
+            rounded_box(
+                f"{bay_name} copper data trace {trace_index}",
+                (bay_x + trace_x_offset, -0.407, 2.18),
+                (0.008, 0.006, 0.40),
+                0.002,
+                copper,
+                mechanisms,
+            )
+        for led_index in range(9):
+            led_column = led_index % 3
+            led_row = led_index // 3
+            cylinder(
+                f"{bay_name} telemetry LED {led_index + 1}",
+                (
+                    bay_x + (led_column - 1) * 0.040,
+                    -0.420,
+                    2.00 + led_row * 0.18,
+                ),
+                0.012,
+                0.012,
+                telemetry_phases[led_index % 3],
+                mechanisms,
+                rotation=(math.radians(90), 0.0, 0.0),
+                vertices=16,
+            )
+        text_object(
+            f"{bay_name} identifier",
+            "CTRL-A" if sign < 0 else "CTRL-B",
+            (bay_x, -0.430, 1.90),
+            0.036,
+            white,
+            labels,
+            extrude=0.002,
+        )
+        for fiber_index, fiber_offset in enumerate((-0.045, 0.0, 0.045), start=1):
+            curve_tube(
+                f"{bay_name} fiber channel {fiber_index}",
+                [
+                    (bay_x + fiber_offset, -0.40, 2.42),
+                    (sign * 1.30 + fiber_offset, -0.34, 2.65),
+                    (sign * 0.82 + fiber_offset, -0.30, 2.84),
+                ],
+                0.008,
+                telemetry,
+                vascular,
+                resolution=2,
+            )
+
     # Synchronized linear pulse actuators.
     pistons: list[bpy.types.Object] = []
     for side, sign in (("Left", -1), ("Right", 1)):
@@ -1495,6 +1680,94 @@ def build() -> None:
         frame,
         scale=(1.0, 0.73, 1.0),
     )
+    # Contactless telemetry crown with a slowly rotating twelve-sensor array.
+    telemetry_crown_center = Vector((0.0, 0.08, 3.88))
+    torus(
+        "Telemetry crown outer rail",
+        telemetry_crown_center,
+        1.01,
+        0.018,
+        titanium,
+        frame,
+        scale=(1.0, 0.70, 1.0),
+    )
+    torus(
+        "Telemetry crown copper winding",
+        telemetry_crown_center,
+        0.93,
+        0.012,
+        copper,
+        frame,
+        scale=(1.0, 0.70, 1.0),
+    )
+    torus(
+        "Telemetry crown optical track",
+        telemetry_crown_center,
+        0.86,
+        0.009,
+        telemetry,
+        frame,
+        scale=(1.0, 0.70, 1.0),
+    )
+    telemetry_sensor_nodes: list[
+        tuple[bpy.types.Object, bpy.types.Object, float]
+    ] = []
+    for sensor_index in range(12):
+        sensor_angle = math.tau * sensor_index / 12.0
+        sensor_position = (
+            telemetry_crown_center.x + 0.93 * math.cos(sensor_angle),
+            telemetry_crown_center.y + 0.65 * math.sin(sensor_angle),
+            telemetry_crown_center.z,
+        )
+        sensor_node = rounded_box(
+            f"Telemetry crown sensor {sensor_index + 1:02d}",
+            sensor_position,
+            (0.13, 0.075, 0.055),
+            0.015,
+            gunmetal,
+            frame,
+            rotation=(0.0, 0.0, sensor_angle),
+        )
+        sensor_lens = cylinder(
+            f"Telemetry crown lens {sensor_index + 1:02d}",
+            (sensor_position[0], sensor_position[1], sensor_position[2] + 0.043),
+            0.022,
+            0.018,
+            telemetry_phases[sensor_index % 3],
+            frame,
+            vertices=20,
+            bevel=0.004,
+        )
+        telemetry_sensor_nodes.append((sensor_node, sensor_lens, sensor_angle))
+    for fiber_index, fiber_angle in enumerate(
+        (math.radians(205), math.radians(235), math.radians(270), math.radians(305), math.radians(335)),
+        start=1,
+    ):
+        crown_point = (
+            telemetry_crown_center.x + 0.86 * math.cos(fiber_angle),
+            telemetry_crown_center.y + 0.60 * math.sin(fiber_angle),
+            telemetry_crown_center.z,
+        )
+        curve_tube(
+            f"Crown fiber optic lead {fiber_index}",
+            [
+                crown_point,
+                (
+                    crown_point[0] * 0.84,
+                    crown_point[1] - 0.04,
+                    3.58,
+                ),
+                (
+                    crown_point[0] * 0.61,
+                    -0.18,
+                    3.18,
+                ),
+            ],
+            0.008,
+            telemetry,
+            vascular,
+            resolution=2,
+        )
     for sign in (-1, 1):
         curve_tube(
             f"Monitor cable {'L' if sign < 0 else 'R'}",
@@ -1558,6 +1831,103 @@ def build() -> None:
             rubber,
             frame,
             resolution=2,
+        )
+
+    # Integrated live hemodynamics console with an animated scan head.
+    rounded_box(
+        "Hemodynamics display housing",
+        (0.0, -1.28, 0.89),
+        (1.42, 0.12, 0.34),
+        0.055,
+        dark_titanium,
+        mechanisms,
+    )
+    rounded_box(
+        "Hemodynamics display substrate",
+        (0.0, -1.355, 0.89),
+        (1.24, 0.025, 0.235),
+        0.028,
+        pcb,
+        mechanisms,
+    )
+    for screw_index, (screw_x, screw_z) in enumerate(
+        ((-0.64, 0.76), (0.64, 0.76), (-0.64, 1.02), (0.64, 1.02)),
+        start=1,
+    ):
+        cylinder(
+            f"Hemodynamics display fastener {screw_index}",
+            (screw_x, -1.365, screw_z),
+            0.020,
+            0.018,
+            titanium,
+            mechanisms,
+            rotation=(math.radians(90), 0.0, 0.0),
+            vertices=6,
+            bevel=0.003,
+        )
+    text_object(
+        "Hemodynamics display title",
+        "LIVE HEMODYNAMICS / MC-V7",
+        (0.0, -1.382, 0.986),
+        0.038,
+        white,
+        labels,
+        extrude=0.002,
+    )
+    arterial_waveform = [
+        (-0.54, -1.385, 0.86),
+        (-0.43, -1.385, 0.86),
+        (-0.36, -1.385, 0.89),
+        (-0.30, -1.385, 0.80),
+        (-0.24, -1.385, 0.93),
+        (-0.16, -1.385, 0.86),
+        (-0.02, -1.385, 0.86),
+        (0.07, -1.385, 0.88),
+        (0.13, -1.385, 0.81),
+        (0.20, -1.385, 0.92),
+        (0.28, -1.385, 0.86),
+        (0.54, -1.385, 0.86),
+    ]
+    curve_tube(
+        "Live arterial waveform",
+        arterial_waveform,
+        0.007,
+        telemetry,
+        labels,
+        resolution=2,
+    )
+    curve_tube(
+        "Live venous baseline",
+        [
+            (-0.54, -1.387, 0.815),
+            (-0.30, -1.387, 0.820),
+            (-0.05, -1.387, 0.810),
+            (0.20, -1.387, 0.822),
+            (0.54, -1.387, 0.815),
+        ],
+        0.004,
+        telemetry_phases[1],
+        labels,
+        resolution=2,
+    )
+    diagnostic_scan_bar = rounded_box(
+        "Hemodynamics scanning bar",
+        (-0.53, -1.399, 0.87),
+        (0.012, 0.010, 0.17),
+        0.003,
+        telemetry,
+        mechanisms,
+    )
+    for port_index, port_x in enumerate((-0.50, -0.42, 0.42, 0.50), start=1):
+        cylinder(
+            f"Hemodynamics data port {port_index}",
+            (port_x, -1.40, 0.78),
+            0.012,
+            0.010,
+            copper,
+            mechanisms,
+            rotation=(math.radians(90), 0.0, 0.0),
+            vertices=16,
         )
 
     # Precision markings and nameplate.
@@ -1725,6 +2095,65 @@ def build() -> None:
                 needle.rotation_euler.y = base_angle + angle_delta
                 needle.keyframe_insert("rotation_euler", frame=start + offset, index=1)
 
+    # The telemetry crown rotates slowly while its twelve probes maintain an
+    # evenly spaced orbital scan around the upper vascular assembly.
+    crown_keyframes = [
+        (1, 0.0),
+        (19, math.pi * 0.25),
+        (37, math.pi * 0.50),
+        (55, math.pi * 0.75),
+        (73, math.pi),
+        (91, math.pi * 1.25),
+        (109, math.pi * 1.50),
+        (127, math.pi * 1.75),
+        (144, math.tau),
+    ]
+    for sensor_node, sensor_lens, base_angle in telemetry_sensor_nodes:
+        for frame_number, angle_delta in crown_keyframes:
+            angle = base_angle + angle_delta
+            node_location = (
+                telemetry_crown_center.x + 0.93 * math.cos(angle),
+                telemetry_crown_center.y + 0.65 * math.sin(angle),
+                telemetry_crown_center.z,
+            )
+            sensor_node.location = node_location
+            sensor_node.rotation_euler.z = angle
+            sensor_lens.location = (
+                node_location[0],
+                node_location[1],
+                node_location[2] + 0.043,
+            )
+            sensor_node.keyframe_insert("location", frame=frame_number)
+            sensor_node.keyframe_insert("rotation_euler", frame=frame_number, index=2)
+            sensor_lens.keyframe_insert("location", frame=frame_number)
+
+    # Phased diagnostic indicators chase across the controller boards and the
+    # optical encoder without overpowering the physically lit metal.
+    for phase_index, phase_mat in enumerate(telemetry_phases):
+        phase_bsdf = phase_mat.node_tree.nodes.get("Principled BSDF")
+        phase_socket = phase_bsdf.inputs.get("Emission Strength")
+        if phase_socket:
+            phase_values: list[tuple[int, float]] = []
+            for cycle_start in (1, 37, 73, 109):
+                phase_values.extend(
+                    (
+                        (cycle_start, 0.06),
+                        (cycle_start + 4 + phase_index * 3, 1.35),
+                        (cycle_start + 10 + phase_index * 3, 0.12),
+                    )
+                )
+            phase_values.append((144, 0.06))
+            keyframe_socket(phase_socket, phase_values)
+
+    for cycle_start in (1, 37, 73, 109):
+        diagnostic_scan_bar.location.x = -0.53
+        diagnostic_scan_bar.keyframe_insert("location", frame=cycle_start)
+        diagnostic_scan_bar.location.x = 0.53
+        diagnostic_scan_bar.keyframe_insert("location", frame=min(cycle_start + 32, 141))
+        diagnostic_scan_bar.keyframe_insert("location", frame=min(cycle_start + 35, 144))
+    diagnostic_scan_bar.location.x = -0.53
+    diagnostic_scan_bar.keyframe_insert("location", frame=144)
+
     # Direct tooth animation keeps the timing wheel mechanically centered.
     timing_keyframes = (
         (1, 0.0),
@@ -1747,8 +2176,8 @@ def build() -> None:
             tooth.keyframe_insert("rotation_euler", frame=frame_number, index=1)
 
     for animated_mat, strength_values in (
-        (arterial, [(1, 0.2), (9, 1.35), (18, 0.4), (37, 0.2), (45, 1.35), (54, 0.4), (73, 0.2), (81, 1.35), (90, 0.4), (109, 0.2), (117, 1.35), (126, 0.4), (144, 0.2)]),
-        (venous, [(1, 0.18), (12, 1.15), (22, 0.35), (37, 0.18), (48, 1.15), (58, 0.35), (73, 0.18), (84, 1.15), (94, 0.35), (109, 0.18), (120, 1.15), (130, 0.35), (144, 0.18)]),
+        (arterial, [(1, 0.04), (9, 0.42), (18, 0.10), (37, 0.04), (45, 0.42), (54, 0.10), (73, 0.04), (81, 0.42), (90, 0.10), (109, 0.04), (117, 0.42), (126, 0.10), (144, 0.04)]),
+        (venous, [(1, 0.035), (12, 0.34), (22, 0.09), (37, 0.035), (48, 0.34), (58, 0.09), (73, 0.035), (84, 0.34), (94, 0.09), (109, 0.035), (120, 0.34), (130, 0.09), (144, 0.035)]),
     ):
         animated_bsdf = animated_mat.node_tree.nodes.get("Principled BSDF")
         emission_socket = animated_bsdf.inputs.get("Emission Strength")
@@ -1758,7 +2187,7 @@ def build() -> None:
     stable_bsdf = pale_green.node_tree.nodes.get("Principled BSDF")
     stable_socket = stable_bsdf.inputs.get("Emission Strength")
     if stable_socket:
-        keyframe_socket(stable_socket, [(1, 0.1), (26, 0.1), (40, 4.0), (144, 4.0)])
+        keyframe_socket(stable_socket, [(1, 0.08), (26, 0.08), (40, 1.7), (144, 1.7)])
 
     # Floor, segmented laboratory wall, and cinematic lighting.
     floor = rounded_box(
@@ -1864,17 +2293,20 @@ def build() -> None:
         light_data.color = color
         light_data.shape = "DISK"
         light_data.size = size
+        light_data.use_shadow = True
+        if hasattr(light_data, "normalize"):
+            light_data.normalize = True
         light_obj = bpy.data.objects.new(name, light_data)
         light_obj.location = location
         lighting.objects.link(light_obj)
         look_at(light_obj, target_point)
         return light_obj
 
-    area_light("Cold surgical key", (4.5, -5.0, 6.8), 780.0, (0.72, 0.86, 1.0), 4.0, (0.0, 0.0, 2.2))
-    area_light("Warm mechanical rim", (-4.0, 1.4, 5.2), 620.0, (1.0, 0.38, 0.12), 3.0, (0.0, 0.2, 2.6))
-    area_light("Soft overhead", (0.0, 0.5, 8.0), 580.0, (0.88, 0.93, 1.0), 3.5, (0.0, 0.0, 2.0))
-    area_light("Front fill", (0.0, -5.0, 2.4), 300.0, (0.32, 0.5, 0.8), 3.0, (0.0, 0.0, 2.0))
-    area_light("Wall inspection bounce", (0.0, 2.45, 4.85), 340.0, (0.56, 0.76, 1.0), 2.6, (0.0, 0.0, 2.35))
+    area_light("Cold surgical key", (4.5, -5.0, 6.8), 690.0, (0.82, 0.88, 0.95), 4.0, (0.0, 0.0, 2.2))
+    area_light("Warm mechanical rim", (-4.0, 1.4, 5.2), 390.0, (0.95, 0.66, 0.43), 3.0, (0.0, 0.2, 2.6))
+    area_light("Soft overhead", (0.0, 0.5, 8.0), 510.0, (0.90, 0.92, 0.95), 3.5, (0.0, 0.0, 2.0))
+    area_light("Front fill", (0.0, -5.0, 2.4), 235.0, (0.52, 0.63, 0.78), 3.0, (0.0, 0.0, 2.0))
+    area_light("Wall inspection bounce", (0.0, 2.45, 4.85), 220.0, (0.62, 0.72, 0.82), 2.6, (0.0, 0.0, 2.35))
 
     camera_data = bpy.data.cameras.new("MACHINA CORDIS camera")
     camera = bpy.data.objects.new("MACHINA CORDIS camera", camera_data)
@@ -1892,8 +2324,8 @@ def build() -> None:
     scene.frame_start = 1
     scene.frame_end = 144
     scene.render.engine = "BLENDER_EEVEE"
-    scene.render.resolution_x = 900
-    scene.render.resolution_y = 900
+    scene.render.resolution_x = 1080
+    scene.render.resolution_y = 1080
     scene.render.resolution_percentage = 100
     scene.render.image_settings.file_format = "PNG"
     scene.render.filepath = str(PREVIEW_PATH)
@@ -1903,22 +2335,24 @@ def build() -> None:
     scene.render.use_file_extension = True
     if hasattr(scene, "eevee"):
         scene.eevee.taa_samples = 48
-    scene.world.color = (0.004, 0.006, 0.01)
+    scene.world.color = (0.007, 0.009, 0.012)
     if scene.world.use_nodes:
         background = scene.world.node_tree.nodes.get("Background")
-        background.inputs["Color"].default_value = (0.004, 0.007, 0.014, 1.0)
-        background.inputs["Strength"].default_value = 0.16
+        background.inputs["Color"].default_value = (0.007, 0.010, 0.015, 1.0)
+        background.inputs["Strength"].default_value = 0.22
 
     scene.render.image_settings.color_depth = "8"
     scene.render.filepath = str(PREVIEW_PATH)
     scene["project"] = "MACHINA CORDIS"
-    scene["description"] = "Animated mechanical heart reactor"
+    scene["description"] = "Advanced animated mechanical heart reactor with integrated telemetry"
     scene["playback"] = "Frames 1–144 at 24 fps"
     scene["render_engine"] = "Eevee Next"
-    scene["safe_build"] = "Moderate geometry, no simulations, no external textures"
+    scene["safe_build"] = "Dense but lightweight geometry, no simulations, no external textures"
 
     try:
+        scene.view_settings.view_transform = "AgX"
         scene.view_settings.look = "AgX - Medium High Contrast"
+        scene.view_settings.exposure = -0.10
     except TypeError:
         pass
 
