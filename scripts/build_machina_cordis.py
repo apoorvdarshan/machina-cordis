@@ -114,6 +114,22 @@ def material(
         links.new(noise.outputs["Fac"], roughness_ramp.inputs["Fac"])
         links.new(roughness_ramp.outputs["Color"], bsdf.inputs["Roughness"])
         links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+        broad_noise = nodes.new("ShaderNodeTexNoise")
+        broad_noise.name = f"{name} broad oxidation"
+        broad_noise.inputs["Scale"].default_value = 3.4
+        broad_noise.inputs["Detail"].default_value = 4.5
+        broad_noise.inputs["Roughness"].default_value = 0.62
+        color_ramp = nodes.new("ShaderNodeValToRGB")
+        color_ramp.name = f"{name} color variation"
+        dark_color = tuple(max(0.002, channel * 0.76) for channel in color[:3])
+        bright_color = tuple(min(1.0, channel * 1.14 + 0.008) for channel in color[:3])
+        color_ramp.color_ramp.elements[0].position = 0.26
+        color_ramp.color_ramp.elements[0].color = (*dark_color, 1.0)
+        color_ramp.color_ramp.elements[1].position = 0.74
+        color_ramp.color_ramp.elements[1].color = (*bright_color, 1.0)
+        links.new(texcoord.outputs["Generated"], broad_noise.inputs["Vector"])
+        links.new(broad_noise.outputs["Fac"], color_ramp.inputs["Fac"])
+        links.new(color_ramp.outputs["Color"], bsdf.inputs["Base Color"])
     return mat
 
 
@@ -431,6 +447,13 @@ def build() -> None:
         metallic=0.55,
         roughness=0.58,
         brushed=True,
+    )
+    inspection_light = material(
+        "Cold inspection luminaire",
+        (0.68, 0.82, 0.92, 1.0),
+        roughness=0.18,
+        emission=(0.62, 0.82, 1.0, 1.0),
+        emission_strength=6.5,
     )
 
     # Pedestal and controls.
@@ -819,6 +842,229 @@ def build() -> None:
         extrude=0.003,
     )
 
+    # Layered upper armor, removable cheek plates, and recessed fasteners.
+    for plate_name, plate_x, plate_z, plate_angle in (
+        ("Left atrial servo cover", -0.48, 2.78, -11),
+        ("Right atrial servo cover", 0.54, 2.82, 9),
+    ):
+        rounded_box(
+            plate_name,
+            (plate_x, -0.515, plate_z),
+            (0.50, 0.060, 0.19),
+            0.045,
+            dark_titanium,
+            mechanisms,
+            rotation=(0.0, math.radians(plate_angle), 0.0),
+        )
+        rounded_box(
+            f"{plate_name} inset",
+            (plate_x, -0.555, plate_z),
+            (0.34, 0.025, 0.075),
+            0.018,
+            gunmetal,
+            mechanisms,
+            rotation=(0.0, math.radians(plate_angle), 0.0),
+        )
+        for bolt_index, bolt_dx in enumerate((-0.19, 0.19), start=1):
+            cylinder(
+                f"{plate_name} fastener {bolt_index}",
+                (plate_x + bolt_dx, -0.575, plate_z),
+                0.021,
+                0.026,
+                brass,
+                mechanisms,
+                rotation=(math.radians(90), 0.0, 0.0),
+                vertices=6,
+                bevel=0.004,
+            )
+
+    # Exposed front crank train: a toothed flywheel, six spokes, twin cam pins,
+    # and articulated connecting rods that visibly convert rotation into pulse.
+    front_flywheel_center = Vector((0.02, -0.82, 1.16))
+    front_flywheel_ring = torus(
+        "Anterior pulse flywheel",
+        front_flywheel_center,
+        0.30,
+        0.045,
+        brass,
+        mechanisms,
+        rotation=(math.radians(90), 0.0, 0.0),
+    )
+    front_flywheel_teeth: list[tuple[bpy.types.Object, float]] = []
+    for tooth_index in range(16):
+        tooth_angle = math.tau * tooth_index / 16.0
+        tooth = rounded_box(
+            f"Anterior flywheel tooth {tooth_index + 1:02d}",
+            (
+                front_flywheel_center.x + 0.38 * math.cos(tooth_angle),
+                front_flywheel_center.y,
+                front_flywheel_center.z + 0.38 * math.sin(tooth_angle),
+            ),
+            (0.095, 0.065, 0.055),
+            0.012,
+            gunmetal if tooth_index % 2 else titanium,
+            mechanisms,
+            rotation=(0.0, -tooth_angle, 0.0),
+        )
+        front_flywheel_teeth.append((tooth, tooth_angle))
+    front_flywheel_spokes: list[tuple[bpy.types.Object, float]] = []
+    for spoke_index in range(6):
+        spoke_angle = math.tau * spoke_index / 6.0
+        spoke_end = (
+            front_flywheel_center.x + 0.265 * math.cos(spoke_angle),
+            front_flywheel_center.y,
+            front_flywheel_center.z + 0.265 * math.sin(spoke_angle),
+        )
+        spoke = cylinder_between(
+            f"Anterior flywheel spoke {spoke_index + 1}",
+            front_flywheel_center,
+            spoke_end,
+            0.025,
+            titanium,
+            mechanisms,
+            vertices=20,
+        )
+        front_flywheel_spokes.append((spoke, spoke_angle))
+    cylinder(
+        "Anterior flywheel bearing housing",
+        (front_flywheel_center.x, front_flywheel_center.y + 0.03, front_flywheel_center.z),
+        0.105,
+        0.20,
+        gunmetal,
+        mechanisms,
+        rotation=(math.radians(90), 0.0, 0.0),
+        bevel=0.018,
+    )
+    front_flywheel_hub = cylinder(
+        "Anterior flywheel hub cap",
+        (front_flywheel_center.x, front_flywheel_center.y - 0.09, front_flywheel_center.z),
+        0.072,
+        0.045,
+        warning,
+        mechanisms,
+        rotation=(math.radians(90), 0.0, 0.0),
+        bevel=0.012,
+    )
+    front_cam_pins: list[
+        tuple[bpy.types.Object, bpy.types.Object, float]
+    ] = []
+    front_linkages: list[
+        tuple[bpy.types.Object, Vector, float, float]
+    ] = []
+    for linkage_index, (base_angle, fixed_endpoint) in enumerate(
+        (
+            (0.0, Vector((-0.30, -0.72, 1.55))),
+            (math.pi, Vector((0.34, -0.72, 1.64))),
+        ),
+        start=1,
+    ):
+        cam_position = Vector(
+            (
+                front_flywheel_center.x + 0.17 * math.cos(base_angle),
+                front_flywheel_center.y - 0.055,
+                front_flywheel_center.z + 0.17 * math.sin(base_angle),
+            )
+        )
+        cam_pin = cylinder(
+            f"Anterior crank pin {linkage_index}",
+            cam_position,
+            0.044,
+            0.055,
+            brass,
+            mechanisms,
+            rotation=(math.radians(90), 0.0, 0.0),
+            bevel=0.008,
+        )
+        linkage = cylinder_between(
+            f"Anterior articulated linkage {linkage_index}",
+            cam_position,
+            fixed_endpoint,
+            0.027,
+            titanium,
+            mechanisms,
+            vertices=24,
+        )
+        front_linkages.append(
+            (linkage, fixed_endpoint, base_angle, (fixed_endpoint - cam_position).length)
+        )
+        crank_joint = uv_sphere(
+            f"Anterior linkage {linkage_index} crank joint",
+            cam_position,
+            (0.058, 0.058, 0.058),
+            brass,
+            mechanisms,
+            segments=24,
+            rings=12,
+        )
+        front_cam_pins.append((cam_pin, crank_joint, base_angle))
+        uv_sphere(
+            f"Anterior linkage {linkage_index} rocker joint",
+            fixed_endpoint,
+            (0.058, 0.058, 0.058),
+            titanium,
+            mechanisms,
+            segments=24,
+            rings=12,
+        )
+
+    # Front valve bridge and four manual trim wheels.
+    cylinder_between(
+        "Atrial valve bridge",
+        (-0.90, -0.46, 3.48),
+        (0.92, -0.46, 3.48),
+        0.065,
+        gunmetal,
+        mechanisms,
+        vertices=32,
+    )
+    for valve_index, valve_x in enumerate((-0.68, -0.23, 0.24, 0.69), start=1):
+        cylinder(
+            f"Trim valve stem {valve_index}",
+            (valve_x, -0.50, 3.48),
+            0.025,
+            0.20,
+            brass,
+            mechanisms,
+            rotation=(math.radians(90), 0.0, 0.0),
+            vertices=20,
+        )
+        torus(
+            f"Trim handwheel {valve_index}",
+            (valve_x, -0.62, 3.48),
+            0.105,
+            0.018,
+            warning if valve_index in (1, 4) else titanium,
+            mechanisms,
+            rotation=(math.radians(90), 0.0, 0.0),
+        )
+        for spoke_index in range(4):
+            wheel_angle = math.tau * spoke_index / 4.0
+            cylinder_between(
+                f"Trim handwheel {valve_index} spoke {spoke_index + 1}",
+                (valve_x, -0.62, 3.48),
+                (
+                    valve_x + 0.088 * math.cos(wheel_angle),
+                    -0.62,
+                    3.48 + 0.088 * math.sin(wheel_angle),
+                ),
+                0.009,
+                brass,
+                mechanisms,
+                vertices=12,
+            )
+        curve_tube(
+            f"Trim valve feed {valve_index}",
+            [
+                (valve_x, -0.44, 3.48),
+                (valve_x * 0.88, -0.31, 3.23),
+                (valve_x * 0.78, -0.24, 3.02),
+            ],
+            0.021,
+            brass,
+            vascular,
+            resolution=2,
+        )
+
     # Glass vascular lines with emissive fluid cores.
     aorta_points = [
         (-0.48, 0.05, 3.38),
@@ -939,6 +1185,36 @@ def build() -> None:
             titanium,
             vascular,
         )
+        for coil_index in range(5):
+            torus(
+                f"{side_name} accumulator retention coil {coil_index + 1}",
+                (accumulator_x, accumulator_y, 3.15 + coil_index * 0.14),
+                0.19,
+                0.014,
+                brass,
+                vascular,
+            )
+        rounded_box(
+            f"{side_name} accumulator scale",
+            (accumulator_x + sign * 0.20, accumulator_y - 0.02, 3.42),
+            (0.035, 0.055, 0.62),
+            0.008,
+            titanium,
+            labels,
+        )
+        for tick_index in range(7):
+            rounded_box(
+                f"{side_name} accumulator tick {tick_index + 1}",
+                (
+                    accumulator_x + sign * 0.225,
+                    accumulator_y - 0.055,
+                    3.15 + tick_index * 0.09,
+                ),
+                (0.060, 0.018, 0.010),
+                0.002,
+                white,
+                labels,
+            )
 
     # Braided-looking service harnesses route power and sensor lines to the bed.
     for harness_index, (sign, lateral_offset) in enumerate(
@@ -958,6 +1234,91 @@ def build() -> None:
             vascular,
             resolution=2,
         )
+
+    # Twin hydraulic manifolds distribute pressure to the four linear rams.
+    manifold_needles: list[bpy.types.Object] = []
+    for side_name, sign, flow_mat in (
+        ("Arterial", -1, arterial),
+        ("Venous", 1, venous),
+    ):
+        manifold_x = sign * 1.56
+        rounded_box(
+            f"{side_name} hydraulic manifold",
+            (manifold_x, -0.18, 2.18),
+            (0.22, 0.28, 1.34),
+            0.055,
+            gunmetal,
+            mechanisms,
+        )
+        for port_index, port_z in enumerate((1.72, 2.02, 2.32, 2.62), start=1):
+            cylinder(
+                f"{side_name} manifold port {port_index}",
+                (manifold_x - sign * 0.13, -0.20, port_z),
+                0.060,
+                0.11,
+                brass,
+                mechanisms,
+                rotation=(0.0, math.radians(90), 0.0),
+                bevel=0.010,
+            )
+            curve_tube(
+                f"{side_name} manifold pressure line {port_index}",
+                [
+                    (manifold_x - sign * 0.18, -0.20, port_z),
+                    (sign * 1.25, -0.13, port_z),
+                    (sign * 0.92, -0.06, port_z - 0.04),
+                ],
+                0.022,
+                flow_mat if port_index in (1, 4) else brass,
+                vascular,
+                resolution=2,
+            )
+        gauge_z = 2.96
+        cylinder(
+            f"{side_name} manifold gauge bezel",
+            (manifold_x, -0.36, gauge_z),
+            0.19,
+            0.11,
+            brass,
+            mechanisms,
+            rotation=(math.radians(90), 0.0, 0.0),
+            bevel=0.020,
+        )
+        cylinder(
+            f"{side_name} manifold gauge face",
+            (manifold_x, -0.425, gauge_z),
+            0.15,
+            0.020,
+            ceramic,
+            mechanisms,
+            rotation=(math.radians(90), 0.0, 0.0),
+        )
+        for tick_index in range(7):
+            tick_angle = math.radians(-60 + tick_index * 20)
+            rounded_box(
+                f"{side_name} manifold gauge tick {tick_index + 1}",
+                (
+                    manifold_x + 0.115 * math.sin(tick_angle),
+                    -0.445,
+                    gauge_z + 0.115 * math.cos(tick_angle),
+                ),
+                (0.012, 0.012, 0.038),
+                0.003,
+                white,
+                mechanisms,
+                rotation=(0.0, tick_angle, 0.0),
+            )
+        manifold_needle = rounded_box(
+            f"{side_name} manifold needle",
+            (manifold_x, -0.45, gauge_z),
+            (0.018, 0.018, 0.125),
+            0.006,
+            warning,
+            mechanisms,
+            rotation=(0.0, math.radians(-20 if sign < 0 else 16), 0.0),
+        )
+        manifold_needle["manifold_side"] = side_name
+        manifold_needles.append(manifold_needle)
 
     # Synchronized linear pulse actuators.
     pistons: list[bpy.types.Object] = []
@@ -1148,6 +1509,57 @@ def build() -> None:
             resolution=3,
         )
 
+    # Rear electrical bus and ceramic isolation stack remain visible through
+    # the gaps in the heart, giving the device believable service depth.
+    for rail_index, (rail_z, rail_mat) in enumerate(
+        ((1.04, brass), (1.28, titanium)),
+        start=1,
+    ):
+        cylinder_between(
+            f"Rear power bus rail {rail_index}",
+            (-1.24, 0.88, rail_z),
+            (1.24, 0.88, rail_z),
+            0.045,
+            rail_mat,
+            frame,
+            vertices=28,
+        )
+    for insulator_index, insulator_x in enumerate((-1.05, -0.52, 0.0, 0.52, 1.05), start=1):
+        cylinder(
+            f"Rear ceramic isolator {insulator_index}",
+            (insulator_x, 0.88, 1.16),
+            0.070,
+            0.32,
+            ceramic,
+            frame,
+            bevel=0.012,
+        )
+        for flange_index, flange_z in enumerate((1.04, 1.16, 1.28), start=1):
+            torus(
+                f"Rear isolator {insulator_index} flange {flange_index}",
+                (insulator_x, 0.88, flange_z),
+                0.085,
+                0.014,
+                titanium,
+                frame,
+            )
+    for lead_index, (sign, endpoint_z) in enumerate(
+        ((-1, 1.78), (-1, 2.62), (1, 1.78), (1, 2.62)),
+        start=1,
+    ):
+        curve_tube(
+            f"Pulse solenoid power lead {lead_index}",
+            [
+                (sign * 0.82, 0.88, 1.28),
+                (sign * 1.18, 0.72, 1.42 + (endpoint_z - 1.78) * 0.35),
+                (sign * 1.46, 0.28, endpoint_z),
+            ],
+            0.020,
+            rubber,
+            frame,
+            resolution=2,
+        )
+
     # Precision markings and nameplate.
     rounded_box(
         "Front nameplate",
@@ -1230,6 +1642,88 @@ def build() -> None:
             ):
                 vane.rotation_euler.y = base_rotation + angle_delta
                 vane.keyframe_insert("rotation_euler", frame=start + offset, index=1)
+
+    # The anterior crank train completes one revolution per heartbeat. Every
+    # visible element is keyed directly so the editable file stays robust.
+    flywheel_keyframes = [
+        (1 + quarter_index * 9, quarter_index * math.pi * 0.5)
+        for quarter_index in range(16)
+    ]
+    flywheel_keyframes.append((144, math.tau * 4.0))
+    for frame_number, angle_delta in flywheel_keyframes:
+        front_flywheel_ring.rotation_euler.y = angle_delta
+        front_flywheel_ring.keyframe_insert("rotation_euler", frame=frame_number, index=1)
+        front_flywheel_hub.rotation_euler.y = angle_delta
+        front_flywheel_hub.keyframe_insert("rotation_euler", frame=frame_number, index=1)
+        for tooth, base_angle in front_flywheel_teeth:
+            angle = base_angle + angle_delta
+            tooth.location = (
+                front_flywheel_center.x + 0.38 * math.cos(angle),
+                front_flywheel_center.y,
+                front_flywheel_center.z + 0.38 * math.sin(angle),
+            )
+            tooth.rotation_euler.y = -angle
+            tooth.keyframe_insert("location", frame=frame_number)
+            tooth.keyframe_insert("rotation_euler", frame=frame_number, index=1)
+        for spoke, base_angle in front_flywheel_spokes:
+            angle = base_angle + angle_delta
+            spoke_start = front_flywheel_center
+            spoke_end = Vector(
+                (
+                    front_flywheel_center.x + 0.265 * math.cos(angle),
+                    front_flywheel_center.y,
+                    front_flywheel_center.z + 0.265 * math.sin(angle),
+                )
+            )
+            spoke_direction = spoke_end - spoke_start
+            spoke.location = (spoke_start + spoke_end) * 0.5
+            spoke.rotation_quaternion = spoke_direction.to_track_quat("Z", "Y")
+            spoke.keyframe_insert("location", frame=frame_number)
+            spoke.keyframe_insert("rotation_quaternion", frame=frame_number)
+        for cam_pin, crank_joint, base_angle in front_cam_pins:
+            angle = base_angle + angle_delta
+            cam_position = Vector(
+                (
+                    front_flywheel_center.x + 0.17 * math.cos(angle),
+                    front_flywheel_center.y - 0.055,
+                    front_flywheel_center.z + 0.17 * math.sin(angle),
+                )
+            )
+            cam_pin.location = cam_position
+            crank_joint.location = cam_position
+            cam_pin.keyframe_insert("location", frame=frame_number)
+            crank_joint.keyframe_insert("location", frame=frame_number)
+        for linkage, fixed_endpoint, base_angle, base_length in front_linkages:
+            angle = base_angle + angle_delta
+            cam_position = Vector(
+                (
+                    front_flywheel_center.x + 0.17 * math.cos(angle),
+                    front_flywheel_center.y - 0.055,
+                    front_flywheel_center.z + 0.17 * math.sin(angle),
+                )
+            )
+            linkage_direction = fixed_endpoint - cam_position
+            linkage.location = (fixed_endpoint + cam_position) * 0.5
+            linkage.rotation_quaternion = linkage_direction.to_track_quat("Z", "Y")
+            linkage.scale.z = linkage_direction.length / base_length
+            linkage.keyframe_insert("location", frame=frame_number)
+            linkage.keyframe_insert("rotation_quaternion", frame=frame_number)
+            linkage.keyframe_insert("scale", frame=frame_number)
+
+    # Secondary gauge needles lag the main pulse slightly, like damped
+    # mechanical instruments rather than synchronized UI indicators.
+    for needle_index, needle in enumerate(manifold_needles):
+        side_offset = 3 if needle_index else 0
+        base_angle = math.radians(-18 if needle_index == 0 else 14)
+        for start in pulse_frames[:-1]:
+            for offset, angle_delta in (
+                (0, 0.0),
+                (9 + side_offset, math.radians(31)),
+                (17 + side_offset, math.radians(12)),
+                (27, 0.0),
+            ):
+                needle.rotation_euler.y = base_angle + angle_delta
+                needle.keyframe_insert("rotation_euler", frame=start + offset, index=1)
 
     # Direct tooth animation keeps the timing wheel mechanically centered.
     timing_keyframes = (
@@ -1331,6 +1825,31 @@ def build() -> None:
                 brass,
                 lighting,
             )
+    rounded_box(
+        "Overhead inspection luminaire",
+        (0.0, 2.92, 5.72),
+        (4.4, 0.09, 0.13),
+        0.035,
+        inspection_light,
+        lighting,
+    )
+    for light_index, light_x in enumerate((-2.54, 2.54), start=1):
+        rounded_box(
+            f"Vertical service luminaire {light_index}",
+            (light_x, 2.94, 3.18),
+            (0.10, 0.065, 1.42),
+            0.028,
+            inspection_light,
+            lighting,
+        )
+        rounded_box(
+            f"Vertical luminaire housing {light_index}",
+            (light_x, 3.00, 3.18),
+            (0.20, 0.12, 1.58),
+            0.035,
+            gunmetal,
+            lighting,
+        )
 
     def area_light(
         name: str,
@@ -1355,6 +1874,7 @@ def build() -> None:
     area_light("Warm mechanical rim", (-4.0, 1.4, 5.2), 620.0, (1.0, 0.38, 0.12), 3.0, (0.0, 0.2, 2.6))
     area_light("Soft overhead", (0.0, 0.5, 8.0), 580.0, (0.88, 0.93, 1.0), 3.5, (0.0, 0.0, 2.0))
     area_light("Front fill", (0.0, -5.0, 2.4), 300.0, (0.32, 0.5, 0.8), 3.0, (0.0, 0.0, 2.0))
+    area_light("Wall inspection bounce", (0.0, 2.45, 4.85), 340.0, (0.56, 0.76, 1.0), 2.6, (0.0, 0.0, 2.35))
 
     camera_data = bpy.data.cameras.new("MACHINA CORDIS camera")
     camera = bpy.data.objects.new("MACHINA CORDIS camera", camera_data)
