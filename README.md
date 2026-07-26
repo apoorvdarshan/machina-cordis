@@ -2,15 +2,13 @@
 
 An animated mechanical heart reactor built entirely in Blender.
 
-[![MACHINA CORDIS mechanical heart reactor — watch the final video](output/machina-cordis-preview.png)](output/machina-cordis-final.mp4)
+![MACHINA CORDIS mechanical heart reactor](output/machina-cordis-final.gif)
 
 MACHINA CORDIS is a fictional surgical machine constructed from brushed titanium pressure chambers, synchronized linear actuators, mechanical iris valves, glass vascular conduits, and two exposed timing systems. Its front crank train converts a rotating 16-tooth flywheel into articulated reciprocating motion while hydraulic manifolds, damped gauges, manual trim valves, pressure accumulators, and a ceramic-isolated power bus explain how the larger machine operates. A rotating telemetry crown, avionics-style controller bays, optical encoder, fiber data channels, and a live hemodynamics console extend the design into believable advanced instrumentation. Procedural oxidation, anisotropic brushing, restrained fluid emission, smooth blended glass, layered armor, exposed fasteners, and practical laboratory lighting give the device a grounded industrial finish. The complete scene is editable and does not rely on external textures or simulations.
 
 ## Final build-to-output video
 
-[Watch the final MACHINA CORDIS video with sound](output/machina-cordis-final.mp4).
-
-The 11.2-second edit moves quickly from the live Blender viewport to the fully rendered close-up. It includes a short output reveal, tracked camera movement, the real mechanical animation, and a synchronized custom heartbeat rhythm. The preview image above also links directly to this video.
+The 11.2-second edit moves quickly from the live Blender viewport to the fully rendered close-up. It includes a short output reveal, tracked camera movement, the real mechanical animation, and a synchronized custom heartbeat rhythm.
 
 ## Open and play
 
