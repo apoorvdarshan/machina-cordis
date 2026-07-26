@@ -92,9 +92,27 @@ def material(
         bump = nodes.new("ShaderNodeBump")
         bump.inputs["Strength"].default_value = 0.16
         bump.inputs["Distance"].default_value = 0.025
+        roughness_ramp = nodes.new("ShaderNodeValToRGB")
+        roughness_ramp.name = f"{name} roughness variation"
+        low_roughness = max(0.04, roughness * 0.72)
+        high_roughness = min(0.92, roughness * 1.38)
+        roughness_ramp.color_ramp.elements[0].color = (
+            low_roughness,
+            low_roughness,
+            low_roughness,
+            1.0,
+        )
+        roughness_ramp.color_ramp.elements[1].color = (
+            high_roughness,
+            high_roughness,
+            high_roughness,
+            1.0,
+        )
         links.new(texcoord.outputs["Generated"], mapping.inputs["Vector"])
         links.new(mapping.outputs["Vector"], noise.inputs["Vector"])
         links.new(noise.outputs["Fac"], bump.inputs["Height"])
+        links.new(noise.outputs["Fac"], roughness_ramp.inputs["Fac"])
+        links.new(roughness_ramp.outputs["Color"], bsdf.inputs["Roughness"])
         links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
     return mat
 
@@ -400,6 +418,20 @@ def build() -> None:
         metallic=0.15,
         roughness=0.35,
     )
+    gunmetal = material(
+        "Oiled gunmetal",
+        (0.025, 0.032, 0.038, 1.0),
+        metallic=0.82,
+        roughness=0.43,
+        brushed=True,
+    )
+    lab_panel = material(
+        "Powder-coated laboratory steel",
+        (0.018, 0.025, 0.032, 1.0),
+        metallic=0.55,
+        roughness=0.58,
+        brushed=True,
+    )
 
     # Pedestal and controls.
     rounded_box(
@@ -427,6 +459,28 @@ def build() -> None:
         pedestal,
     )
     torus("Bed trim", (0.0, 0.0, 0.68), 1.28, 0.035, brass, pedestal, scale=(1.12, 0.82, 1.0))
+
+    # Load-bearing isolation feet and exposed retaining hardware.
+    for x in (-1.68, 1.68):
+        for y in (-1.25, 1.25):
+            cylinder(
+                f"Vibration isolator {x:+.0f} {y:+.0f}",
+                (x, y, -0.015),
+                0.22,
+                0.13,
+                rubber,
+                pedestal,
+                bevel=0.025,
+            )
+            cylinder(
+                f"Isolator washer {x:+.0f} {y:+.0f}",
+                (x, y, 0.055),
+                0.15,
+                0.035,
+                brass,
+                pedestal,
+                bevel=0.008,
+            )
 
     for index in range(12):
         angle = math.tau * index / 12.0
@@ -560,7 +614,8 @@ def build() -> None:
                 scale=(scale_x, scale_y, 1.0),
             )
 
-    # Front inspection ports, diaphragms, and fasteners.
+    # Front inspection ports, diaphragms, iris vanes, and fasteners.
+    iris_vanes: list[tuple[bpy.types.Object, float]] = []
     for side_name, x, z, fluid_mat in (
         ("Arterial", -0.39, 2.18, arterial),
         ("Venous", 0.49, 2.30, venous),
@@ -594,6 +649,56 @@ def build() -> None:
             rotation=(math.radians(90), 0.0, 0.0),
         )
         diaphragm["pulse_component"] = True
+        torus(
+            f"{side_name} iris guide",
+            (x, -0.755, z),
+            0.205,
+            0.018,
+            gunmetal,
+            mechanisms,
+            rotation=(math.radians(90), 0.0, 0.0),
+        )
+        for vane_index in range(9):
+            angle = math.tau * vane_index / 9.0
+            vane = rounded_box(
+                f"{side_name} iris vane {vane_index + 1:02d}",
+                (
+                    x + 0.11 * math.cos(angle),
+                    -0.775,
+                    z + 0.11 * math.sin(angle),
+                ),
+                (0.18, 0.022, 0.052),
+                0.011,
+                dark_titanium if vane_index % 2 else titanium,
+                mechanisms,
+                rotation=(0.0, -angle + math.radians(18), 0.0),
+            )
+            iris_vanes.append((vane, vane.rotation_euler.y))
+            cylinder(
+                f"{side_name} iris pivot {vane_index + 1:02d}",
+                (
+                    x + 0.215 * math.cos(angle),
+                    -0.79,
+                    z + 0.215 * math.sin(angle),
+                ),
+                0.017,
+                0.026,
+                brass,
+                mechanisms,
+                rotation=(math.radians(90), 0.0, 0.0),
+                vertices=16,
+                bevel=0.004,
+            )
+        cylinder(
+            f"{side_name} iris hub",
+            (x, -0.79, z),
+            0.055,
+            0.035,
+            brass,
+            mechanisms,
+            rotation=(math.radians(90), 0.0, 0.0),
+            bevel=0.008,
+        )
         for bolt_index in range(8):
             angle = math.tau * bolt_index / 8.0
             cylinder(
@@ -606,6 +711,113 @@ def build() -> None:
                 rotation=(math.radians(90), 0.0, 0.0),
                 vertices=20,
             )
+        text_object(
+            f"{side_name} pump marking",
+            "LV PUMP" if side_name == "Arterial" else "RV PUMP",
+            (x, -0.805, z - 0.45),
+            0.055,
+            white,
+            labels,
+            extrude=0.003,
+        )
+
+    # Shell service seams, flush rivets, and lateral cooling banks make the
+    # chambers read as manufactured pressure vessels rather than smooth toys.
+    for side_name, x, sign in (("Left", -0.38, -1), ("Right", 0.48, 1)):
+        seam_points = [
+            (x + sign * 0.38, -0.52, 1.52),
+            (x + sign * 0.57, -0.54, 1.94),
+            (x + sign * 0.59, -0.50, 2.46),
+            (x + sign * 0.43, -0.43, 2.85),
+        ]
+        curve_tube(f"{side_name} shell service seam", seam_points, 0.018, rubber, core, resolution=2)
+        for rivet_index, seam_point in enumerate(seam_points):
+            cylinder(
+                f"{side_name} seam rivet {rivet_index + 1}",
+                (seam_point[0], seam_point[1] - 0.025, seam_point[2]),
+                0.023,
+                0.025,
+                brass,
+                core,
+                rotation=(math.radians(90), 0.0, 0.0),
+                vertices=16,
+                bevel=0.004,
+            )
+        for fin_index in range(6):
+            rounded_box(
+                f"{side_name} cooling fin {fin_index + 1}",
+                (x + sign * 0.78, 0.08, 1.60 + fin_index * 0.24),
+                (0.075, 0.50, 0.13),
+                0.018,
+                gunmetal if fin_index % 2 == 0 else dark_titanium,
+                mechanisms,
+                rotation=(0.0, math.radians(sign * 4), 0.0),
+            )
+        rounded_box(
+            f"{side_name} cooling manifold",
+            (x + sign * 0.79, 0.08, 2.20),
+            (0.11, 0.25, 1.58),
+            0.025,
+            brass,
+            mechanisms,
+        )
+
+    # Bolted lower access panels and a ribbed sternum rail break up the
+    # remaining uninterrupted shell surfaces.
+    for panel_name, panel_x, panel_z, panel_rotation in (
+        ("Left ventricular service plate", -0.42, 1.48, -5),
+        ("Right ventricular service plate", 0.43, 1.58, 6),
+    ):
+        rounded_box(
+            panel_name,
+            (panel_x, -0.585, panel_z),
+            (0.42, 0.055, 0.25),
+            0.035,
+            gunmetal,
+            mechanisms,
+            rotation=(0.0, math.radians(panel_rotation), 0.0),
+        )
+        for bolt_index, (bolt_dx, bolt_dz) in enumerate(
+            ((-0.16, -0.085), (0.16, -0.085), (-0.16, 0.085), (0.16, 0.085)),
+            start=1,
+        ):
+            cylinder(
+                f"{panel_name} bolt {bolt_index}",
+                (panel_x + bolt_dx, -0.625, panel_z + bolt_dz),
+                0.018,
+                0.026,
+                brass,
+                mechanisms,
+                rotation=(math.radians(90), 0.0, 0.0),
+                vertices=16,
+                bevel=0.004,
+            )
+    rounded_box(
+        "Sternum transmission rail",
+        (0.02, -0.63, 1.45),
+        (0.12, 0.09, 0.83),
+        0.025,
+        brass,
+        mechanisms,
+    )
+    for rib_index in range(6):
+        rounded_box(
+            f"Sternum reinforcing rib {rib_index + 1}",
+            (0.02, -0.685, 1.13 + rib_index * 0.13),
+            (0.43, 0.045, 0.052),
+            0.012,
+            titanium if rib_index % 2 == 0 else dark_titanium,
+            mechanisms,
+        )
+    text_object(
+        "Core housing marking",
+        "CORE 7",
+        (0.02, -0.718, 1.93),
+        0.052,
+        warning,
+        labels,
+        extrude=0.003,
+    )
 
     # Glass vascular lines with emissive fluid cores.
     aorta_points = [
@@ -672,6 +884,81 @@ def build() -> None:
             vascular,
         )
 
+    # Calibrated pressure accumulators with visible working fluid.
+    for side_name, sign, flow_mat in (
+        ("Arterial", -1, arterial),
+        ("Venous", 1, venous),
+    ):
+        accumulator_x = sign * 1.30
+        accumulator_y = 0.64
+        accumulator_z = 3.42
+        cylinder(
+            f"{side_name} accumulator glass",
+            (accumulator_x, accumulator_y, accumulator_z),
+            0.17,
+            0.82,
+            glass,
+            vascular,
+            bevel=0.012,
+        )
+        cylinder(
+            f"{side_name} accumulator fluid",
+            (accumulator_x, accumulator_y, accumulator_z - 0.08),
+            0.115,
+            0.58,
+            flow_mat,
+            vascular,
+        )
+        for cap_index, cap_z in enumerate((3.00, 3.84)):
+            cylinder(
+                f"{side_name} accumulator cap {cap_index + 1}",
+                (accumulator_x, accumulator_y, cap_z),
+                0.21,
+                0.10,
+                brass,
+                vascular,
+                bevel=0.018,
+            )
+        curve_tube(
+            f"{side_name} accumulator feed",
+            [
+                (accumulator_x, accumulator_y, 3.00),
+                (sign * 1.18, 0.45, 2.80),
+                (sign * 0.78, 0.30, 2.62),
+            ],
+            0.045,
+            gunmetal,
+            vascular,
+            resolution=3,
+        )
+        torus(
+            f"{side_name} accumulator collar",
+            (accumulator_x, accumulator_y, 3.72),
+            0.18,
+            0.025,
+            titanium,
+            vascular,
+        )
+
+    # Braided-looking service harnesses route power and sensor lines to the bed.
+    for harness_index, (sign, lateral_offset) in enumerate(
+        ((-1, -0.10), (-1, 0.08), (1, -0.08), (1, 0.11)),
+        start=1,
+    ):
+        curve_tube(
+            f"Service harness {harness_index}",
+            [
+                (sign * (0.64 + lateral_offset), 0.38, 2.94),
+                (sign * (0.98 + lateral_offset), 0.54, 2.30),
+                (sign * (1.14 + lateral_offset), 0.48, 1.35),
+                (sign * (1.32 + lateral_offset), 0.20, 0.70),
+            ],
+            0.027,
+            rubber,
+            vascular,
+            resolution=2,
+        )
+
     # Synchronized linear pulse actuators.
     pistons: list[bpy.types.Object] = []
     for side, sign in (("Left", -1), ("Right", 1)):
@@ -702,6 +989,27 @@ def build() -> None:
                 rubber,
                 mechanisms,
                 rotation=(0.0, math.radians(90), 0.0),
+            )
+            cylinder(
+                f"{side} actuator end collar {level_index + 1}",
+                (sign * 1.73, 0.06, z),
+                0.145,
+                0.085,
+                brass,
+                mechanisms,
+                rotation=(0.0, math.radians(90), 0.0),
+                bevel=0.018,
+            )
+            cylinder(
+                f"{side} actuator end cap {level_index + 1}",
+                (sign * 1.78, 0.06, z),
+                0.095,
+                0.035,
+                titanium,
+                mechanisms,
+                rotation=(0.0, math.radians(90), 0.0),
+                vertices=28,
+                bevel=0.012,
             )
 
     # Side-mounted timing gear and teeth.
@@ -777,6 +1085,44 @@ def build() -> None:
             0.06,
             dark_titanium,
             frame,
+        )
+        # Articulated restraint arm transfers pulse load into the rear frame.
+        clamp_start = (sign * 1.48, 0.70, 3.24)
+        clamp_joint = (sign * 1.11, 0.46, 3.13)
+        clamp_end = (sign * 0.78, 0.24, 3.03)
+        cylinder_between(
+            f"Upper restraint arm outer {'L' if sign < 0 else 'R'}",
+            clamp_start,
+            clamp_joint,
+            0.052,
+            gunmetal,
+            frame,
+        )
+        cylinder_between(
+            f"Upper restraint arm inner {'L' if sign < 0 else 'R'}",
+            clamp_joint,
+            clamp_end,
+            0.043,
+            brass,
+            frame,
+        )
+        uv_sphere(
+            f"Restraint spherical joint {'L' if sign < 0 else 'R'}",
+            clamp_joint,
+            (0.11, 0.11, 0.11),
+            titanium,
+            frame,
+            segments=28,
+            rings=14,
+        )
+        torus(
+            f"Atrial restraint collar {'L' if sign < 0 else 'R'}",
+            clamp_end,
+            0.105,
+            0.028,
+            brass,
+            frame,
+            rotation=(math.radians(90), 0.0, 0.0),
         )
     cylinder_between("Upper frame bridge", (-1.48, 0.72, 4.15), (1.48, 0.72, 4.15), 0.095, titanium, frame)
     torus(
@@ -873,6 +1219,39 @@ def build() -> None:
                 piston.location = base_location + Vector((direction * displacement, 0.0, 0.0))
                 piston.keyframe_insert("location", frame=start + offset)
 
+    # The iris valves snap open on each ventricular pressure peak.
+    for vane, base_rotation in iris_vanes:
+        for start in pulse_frames[:-1]:
+            for offset, angle_delta in (
+                (0, 0.0),
+                (8, math.radians(13)),
+                (14, math.radians(-3)),
+                (24, 0.0),
+            ):
+                vane.rotation_euler.y = base_rotation + angle_delta
+                vane.keyframe_insert("rotation_euler", frame=start + offset, index=1)
+
+    # Direct tooth animation keeps the timing wheel mechanically centered.
+    timing_keyframes = (
+        (1, 0.0),
+        (37, math.pi * 0.5),
+        (73, math.pi),
+        (109, math.pi * 1.5),
+        (144, math.tau),
+    )
+    for tooth_index, tooth in enumerate(timing_teeth):
+        base_angle = math.tau * tooth_index / len(timing_teeth)
+        for frame_number, angle_delta in timing_keyframes:
+            angle = base_angle + angle_delta
+            tooth.location = (
+                gear_center.x + 0.66 * math.cos(angle),
+                gear_center.y,
+                gear_center.z + 0.66 * math.sin(angle),
+            )
+            tooth.rotation_euler.y = -angle
+            tooth.keyframe_insert("location", frame=frame_number)
+            tooth.keyframe_insert("rotation_euler", frame=frame_number, index=1)
+
     for animated_mat, strength_values in (
         (arterial, [(1, 0.2), (9, 1.35), (18, 0.4), (37, 0.2), (45, 1.35), (54, 0.4), (73, 0.2), (81, 1.35), (90, 0.4), (109, 0.2), (117, 1.35), (126, 0.4), (144, 0.2)]),
         (venous, [(1, 0.18), (12, 1.15), (22, 0.35), (37, 0.18), (48, 1.15), (58, 0.35), (73, 0.18), (84, 1.15), (94, 0.35), (109, 0.18), (120, 1.15), (130, 0.35), (144, 0.18)]),
@@ -887,7 +1266,7 @@ def build() -> None:
     if stable_socket:
         keyframe_socket(stable_socket, [(1, 0.1), (26, 0.1), (40, 4.0), (144, 4.0)])
 
-    # Floor and cinematic lighting.
+    # Floor, segmented laboratory wall, and cinematic lighting.
     floor = rounded_box(
         "Laboratory floor",
         (0.0, 0.0, -0.16),
@@ -896,6 +1275,62 @@ def build() -> None:
         ceramic,
         lighting,
     )
+    for panel_index, panel_x in enumerate((-3.0, 0.0, 3.0), start=1):
+        rounded_box(
+            f"Laboratory wall panel {panel_index}",
+            (panel_x, 3.15, 2.65),
+            (2.82, 0.18, 5.55),
+            0.08,
+            lab_panel,
+            lighting,
+        )
+        rounded_box(
+            f"Wall panel service channel {panel_index}",
+            (panel_x, 3.045, 2.63),
+            (0.12, 0.045, 4.70),
+            0.018,
+            gunmetal,
+            lighting,
+        )
+        for bolt_index, (bolt_x, bolt_z) in enumerate(
+            (
+                (panel_x - 1.22, 0.40),
+                (panel_x + 1.22, 0.40),
+                (panel_x - 1.22, 4.90),
+                (panel_x + 1.22, 4.90),
+            ),
+            start=1,
+        ):
+            cylinder(
+                f"Wall panel {panel_index} anchor {bolt_index}",
+                (bolt_x, 3.04, bolt_z),
+                0.055,
+                0.045,
+                titanium,
+                lighting,
+                rotation=(math.radians(90), 0.0, 0.0),
+                vertices=20,
+                bevel=0.008,
+            )
+    for conduit_index, x in enumerate((-2.05, 2.05), start=1):
+        cylinder_between(
+            f"Wall utility conduit {conduit_index}",
+            (x, 3.00, 0.25),
+            (x, 3.00, 5.05),
+            0.055,
+            gunmetal,
+            lighting,
+            vertices=24,
+        )
+        for clamp_index, z in enumerate((0.85, 2.65, 4.45), start=1):
+            torus(
+                f"Wall conduit clamp {conduit_index}-{clamp_index}",
+                (x, 3.00, z),
+                0.075,
+                0.018,
+                brass,
+                lighting,
+            )
 
     def area_light(
         name: str,
