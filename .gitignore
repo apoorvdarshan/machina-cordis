@@ -4,3 +4,4 @@
 *.blend@
 *.blend~
 __pycache__/
+output/*.exr
